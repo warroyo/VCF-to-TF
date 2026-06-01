@@ -12,7 +12,7 @@ import (
 	"fmt"
 	"os"
 
-	"vcf2tf/internal/cli"
+	"github.com/warroyo/VCF-to-TF/internal/cli"
 )
 
 func main() {

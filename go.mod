@@ -1,4 +1,4 @@
-module vcf2tf
+module github.com/warroyo/VCF-to-TF
 
 go 1.24.2
 

@@ -6,7 +6,7 @@ import (
 
 	"github.com/spf13/cobra"
 
-	"vcf2tf/internal/k8s"
+	"github.com/warroyo/VCF-to-TF/internal/k8s"
 )
 
 func newExampleCommand() *cobra.Command {

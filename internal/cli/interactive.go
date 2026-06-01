@@ -7,8 +7,8 @@ import (
 
 	"github.com/charmbracelet/bubbles/list"
 
-	"vcf2tf/internal/k8s"
-	"vcf2tf/internal/tf"
+	"github.com/warroyo/VCF-to-TF/internal/k8s"
+	"github.com/warroyo/VCF-to-TF/internal/tf"
 )
 
 // runInteractive shows the API-type picker and returns the generated HCL

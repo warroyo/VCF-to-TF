@@ -7,9 +7,13 @@ import (
 
 	"github.com/spf13/cobra"
 
-	"vcf2tf/internal/k8s"
-	"vcf2tf/internal/tf"
+	"github.com/warroyo/VCF-to-TF/internal/k8s"
+	"github.com/warroyo/VCF-to-TF/internal/tf"
 )
+
+// Version is the build version, injected at release time via -ldflags
+// "-X github.com/warroyo/VCF-to-TF/internal/cli.Version=...". Defaults to "dev" for local builds.
+var Version = "dev"
 
 // shared flags bound on the root command and read by every subcommand.
 var (
@@ -22,8 +26,9 @@ var (
 // scripted, non-interactive use.
 func NewRootCommand() *cobra.Command {
 	root := &cobra.Command{
-		Use:   "vcf2tf",
-		Short: "Generate Terraform HCL examples from a cluster's available APIs",
+		Use:     "vcf2tf",
+		Version: Version,
+		Short:   "Generate Terraform HCL examples from a cluster's available APIs",
 		Long: `vcf2tf inspects the available API types on the active Kubernetes context
 (like "kubectl api-resources") and generates a Terraform HCL skeleton from each
 type's OpenAPI schema (like "kubectl explain"), with field descriptions as

@@ -1,93 +1,108 @@
 # vcf2tf
 
-Inspect the **available API types** on the active Kubernetes/VCF context (like
-`kubectl api-resources`) and generate a Terraform HCL skeleton from each type's
-**OpenAPI schema** (like `kubectl explain`), with field descriptions as inline
-comments. It does **not** read live/deployed objects — it works from the API
-definitions the cluster publishes.
+[![ci](https://github.com/warroyo/VCF-to-TF/actions/workflows/ci.yml/badge.svg)](https://github.com/warroyo/VCF-to-TF/actions/workflows/ci.yml)
+[![release](https://github.com/warroyo/VCF-to-TF/actions/workflows/release.yml/badge.svg)](https://github.com/warroyo/VCF-to-TF/actions/workflows/release.yml)
+[![latest release](https://img.shields.io/github/v/release/warroyo/VCF-to-TF?sort=semver)](https://github.com/warroyo/VCF-to-TF/releases/latest)
+[![go version](https://img.shields.io/github/go-mod/go-version/warroyo/VCF-to-TF)](go.mod)
 
-- **Strategy A — native provider:** standard core/apps/batch/networking/rbac
-  kinds render as native `kubernetes_*` provider resources (block style,
-  snake_case fields).
-- **Strategy B — manifest:** any other kind (VCF CRDs, etc.) renders as a
-  generic `kubernetes_manifest` resource mirroring the exact API schema
-  (object style, original field names).
+`vcf2tf` reads the API types your cluster exposes and prints a Terraform block
+for whichever one you pick. Every field comes with its description as a comment,
+so you keep what you need and delete the rest.
 
-Auth/kubeconfig setup is assumed to be handled upstream by VCF tooling; this
-tool just reads the current context.
+It builds from the API schema, not your running objects. You get a blank
+template to fill in, not a copy of something already deployed.
 
-## Build
+Standard Kubernetes types (Deployment, Secret, Service, and so on) come out as
+native `kubernetes_*` resources. Everything else, including VCF custom
+resources, comes out as a `kubernetes_manifest`.
+
+## Install
 
 ```sh
-go mod tidy
-go build -o vcf2tf .
+go install github.com/warroyo/VCF-to-TF/cmd/vcf2tf@latest
 ```
+
+Or grab a prebuilt binary from the [releases page](https://github.com/warroyo/VCF-to-TF/releases).
+
+It uses whatever context `kubectl` is already pointed at. Nothing else to set up.
 
 ## Usage
 
-### Interactive (no args)
+### Browse the cluster
+
+Run it with no arguments to search the full list of API types:
 
 ```sh
 vcf2tf
 ```
 
-Launches a keyboard-driven picker: browse/filter every API type the cluster
-advertises (each tagged `native` or `manifest`), pick one, and the generated HCL
-skeleton prints to stdout. Keys: `↑/↓` move, `/` filter, `enter` select,
-`q`/`esc` quit. The TUI renders to stderr, so stdout stays clean and pipeable
-(`vcf2tf > out.tf`).
+Type to filter, arrow keys to move, `Enter` to pick, `q` to quit. The block
+prints to stdout.
 
-### Direct (scripted)
+### Generate one directly
+
+Already know the type? Name it:
 
 ```sh
-vcf2tf example <resource_type>   # aliases: explain, get
-
-# examples
 vcf2tf example deployment
 vcf2tf example secret
-vcf2tf example tanzukubernetesclusters
+vcf2tf example tanzukubernetescluster
 vcf2tf example gateways.networking.tanzu.vmware.com
 ```
 
-Flags: `--kubeconfig`, `--context`.
+The name can be a kind (`Deployment`), a plural (`deployments`), or the fully
+qualified form (`resource.group`). Send it straight to a file:
 
-`<resource_type>` matches a kind, a plural resource name, or a fully qualified
-`resource.group` form (case-insensitive, with prefix fallback) against the
-cluster's discovered API types — so CRDs work without code changes.
-
-Namespace is not a flag: this tool describes Kubernetes APIs, not namespaces.
-
-## Layout
-
-```
-main.go                      entry point
-internal/cli/root.go         cobra root + interactive entry + shared helpers
-internal/cli/example.go      non-interactive `example <type>` + type matching
-internal/cli/picker.go       bubbletea filterable list picker (renders to stderr)
-internal/cli/interactive.go  pick API type -> generate skeleton
-internal/k8s/client.go       context discovery, api-resources list, OpenAPI fetch
-internal/tf/registry.go      GVK -> native provider resource type table
-internal/tf/schema.go        OpenAPI v3 schema model + $ref resolution
-internal/tf/example.go       schema -> HCL skeleton generator (BuildExample)
-internal/tf/example_helpers.go  placeholders, type labels, comment wrapping
-internal/tf/hcl.go           naming + singularization helpers
+```sh
+vcf2tf example deployment > deployment.tf
 ```
 
-## Notes / limitations
+## What you get
 
-- Output is canonically formatted via `hclwrite.Format` (equivalent to
-  `terraform fmt`).
-- Recursion is bounded (`maxDepth = 6`) so deeply nested or self-referential
-  schemas produce a usable skeleton; truncated branches are marked with a
-  comment.
-- `metadata` is rendered as a slim `name`/`namespace`/`labels`/`annotations`
-  stub rather than expanding the full `ObjectMeta` schema; `status` and
-  `apiVersion`/`kind` (manifest carries the latter two literally) are not
-  expanded.
-- The native writer uses a heuristic: scalar fields and open maps (`labels`,
-  `matchLabels`, ...) become HCL attributes, nested objects become blocks, and
-  arrays of objects become repeated blocks (common plurals singularized,
-  `containers` -> `container`). Uncommon provider block names may need a manual
-  tweak; when in doubt the manifest strategy is exact.
-- Each field is annotated with a `# [required, type, one of: ...]` line and the
-  API's own description.
+```sh
+$ vcf2tf example deployment
+```
+
+```hcl
+resource "kubernetes_deployment" "example" {
+  # Standard object metadata.
+  metadata {
+    # Name of the object (required).
+    name = ""
+    # Namespace to create the object in.
+    namespace = ""
+  }
+  spec {
+    # Number of desired pods.
+    # [integer (int32)]
+    replicas = 0
+    container {
+      # [string]
+      image = ""
+      # [string, one of: Always, IfNotPresent, Never]
+      image_pull_policy = "Always"
+    }
+  }
+}
+```
+
+The comments come straight from the API docs, with a `# [type, required, allowed
+values]` hint on each field. Output is already formatted, so `terraform fmt` has
+nothing left to do.
+
+## Worth knowing
+
+- The values are placeholders (`""`, `0`, `false`). Treat the output as a
+  scaffold to edit, not something to apply as-is.
+- Big nested types get cut off at a reasonable depth, with a comment marking
+  where, so you don't end up with a thousand-line wall.
+- `metadata` shows the fields you actually touch (name, namespace, labels,
+  annotations) instead of the entire Kubernetes metadata schema.
+
+## Flags
+
+| Flag | Description |
+| --- | --- |
+| `--kubeconfig` | Path to kubeconfig (defaults to `KUBECONFIG`, then `~/.kube/config`). |
+| `--context` | Context to use (defaults to your current one). |
+| `--version` | Print the version. |
