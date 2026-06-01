@@ -35,18 +35,18 @@ func runInteractive(ctx context.Context, client *k8s.Client) (string, error) {
 			scope = "namespaced"
 		}
 		items = append(items, pickItem{
-			title: r.Kind,
-			desc:  fmt.Sprintf("%s · %s · %s", r.GroupVersion(), scope, strategy),
+			title: fmt.Sprintf("%-30s %s · %s · %s", r.Kind, r.GroupVersion(), scope, strategy),
+			desc:  "",
 			value: r,
 		})
 	}
 
-	chosen, err := runPicker("Select an API resource type", "type", items)
+	chosen, comments, err := runPicker("Select an API resource type", "type", items, !flagNoComments)
 	if err != nil {
 		return "", err
 	}
 	res := chosen.(k8s.APIResource)
 
 	fmt.Fprintf(os.Stderr, "Generating Terraform example for %s…\n", res.Kind)
-	return generate(client, res)
+	return generate(client, res, comments)
 }

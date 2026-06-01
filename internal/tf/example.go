@@ -18,7 +18,7 @@ const maxDepth = 6
 // Native core/apps/batch/... kinds render as their native kubernetes_* provider
 // resource (block style, snake_case). Everything else renders as a
 // kubernetes_manifest with the exact API schema (object style, original names).
-func BuildExample(doc []byte, group, version, kind string) (string, error) {
+func BuildExample(doc []byte, group, version, kind string, comments bool) (string, error) {
 	set, err := parseSchemaSet(doc)
 	if err != nil {
 		return "", err
@@ -33,7 +33,7 @@ func BuildExample(doc []byte, group, version, kind string) (string, error) {
 		apiVersion = group + "/" + version
 	}
 
-	g := &generator{set: set, sb: &strings.Builder{}}
+	g := &generator{set: set, sb: &strings.Builder{}, comments: comments}
 
 	if tfType, ok := nativeType(gvk(group, version, kind)); ok {
 		g.native(tfType, kind, apiVersion, root)
@@ -47,12 +47,16 @@ func BuildExample(doc []byte, group, version, kind string) (string, error) {
 }
 
 type generator struct {
-	set *schemaSet
-	sb  *strings.Builder
+	set      *schemaSet
+	sb       *strings.Builder
+	comments bool // when false, no comment lines are emitted
 }
 
 func (g *generator) line(s string) { g.sb.WriteString(s + "\n") }
 func (g *generator) comment(text string) {
+	if !g.comments {
+		return
+	}
 	for _, l := range wrapComment(text) {
 		g.line("# " + l)
 	}
@@ -192,6 +196,9 @@ func (g *generator) openContainer(name string, object bool, brace string) {
 
 // emitDoc writes the description plus a required/type/enum annotation line.
 func (g *generator) emitDoc(desc string, node *schemaNode, required bool) {
+	if !g.comments {
+		return
+	}
 	if desc != "" {
 		g.comment(desc)
 	}

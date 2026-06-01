@@ -19,6 +19,7 @@ var Version = "dev"
 var (
 	flagKubeconfig string
 	flagContext    string
+	flagNoComments bool
 )
 
 // NewRootCommand builds the top-level cobra command tree. Running the binary
@@ -60,6 +61,7 @@ generic kubernetes_manifest resource.`,
 
 	root.PersistentFlags().StringVar(&flagKubeconfig, "kubeconfig", "", "path to kubeconfig (defaults to KUBECONFIG or ~/.kube/config)")
 	root.PersistentFlags().StringVar(&flagContext, "context", "", "kubeconfig context to use (defaults to current-context)")
+	root.PersistentFlags().BoolVar(&flagNoComments, "no-comments", false, "omit field documentation comments from the output")
 
 	root.AddCommand(newExampleCommand())
 	return root
@@ -76,12 +78,12 @@ func newClient() (*k8s.Client, error) {
 
 // generate fetches the OpenAPI schema for an API type and renders the HCL
 // skeleton.
-func generate(client *k8s.Client, r k8s.APIResource) (string, error) {
+func generate(client *k8s.Client, r k8s.APIResource, comments bool) (string, error) {
 	doc, err := client.FetchOpenAPI(r)
 	if err != nil {
 		return "", fmt.Errorf("fetch schema for %s: %w", r.Kind, err)
 	}
-	hcl, err := tf.BuildExample(doc, r.Group, r.Version, r.Kind)
+	hcl, err := tf.BuildExample(doc, r.Group, r.Version, r.Kind, comments)
 	if err != nil {
 		return "", fmt.Errorf("generate HCL for %s: %w", r.Kind, err)
 	}

@@ -80,7 +80,7 @@ const sampleDoc = `{
 }`
 
 func TestExampleNative(t *testing.T) {
-	out, err := BuildExample([]byte(sampleDoc), "apps", "v1", "Deployment")
+	out, err := BuildExample([]byte(sampleDoc), "apps", "v1", "Deployment", true)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -104,7 +104,7 @@ func TestExampleNative(t *testing.T) {
 }
 
 func TestExampleManifest(t *testing.T) {
-	out, err := BuildExample([]byte(sampleDoc), "example.com", "v1", "Widget")
+	out, err := BuildExample([]byte(sampleDoc), "example.com", "v1", "Widget", true)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -123,6 +123,28 @@ func TestExampleManifest(t *testing.T) {
 	} {
 		if !strings.Contains(out, want) {
 			t.Errorf("manifest output missing %q\n---\n%s", want, out)
+		}
+	}
+}
+
+func TestExampleNoComments(t *testing.T) {
+	out, err := BuildExample([]byte(sampleDoc), "apps", "v1", "Deployment", false)
+	if err != nil {
+		t.Fatal(err)
+	}
+	mustParse(t, out)
+
+	if strings.Contains(out, "#") {
+		t.Errorf("expected no comments with comments=false, got:\n%s", out)
+	}
+	// structure must still be present
+	for _, want := range []string{
+		`resource "kubernetes_deployment" "example"`,
+		"replicas = 0",
+		"container {",
+	} {
+		if !strings.Contains(out, want) {
+			t.Errorf("no-comments output missing %q\n---\n%s", want, out)
 		}
 	}
 }

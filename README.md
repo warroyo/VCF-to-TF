@@ -39,8 +39,8 @@ Run it with no arguments to search the full list of API types:
 vcf2tf
 ```
 
-Type to filter, arrow keys to move, `Enter` to pick, `q` to quit. The block
-prints to stdout.
+Type to filter, arrow keys to move, `c` to toggle comments on/off, `Enter` to
+pick, `q` to quit. The block prints to stdout.
 
 ### Generate one directly
 
@@ -93,6 +93,12 @@ The comments come straight from the API docs, with a `# [type, required, allowed
 values]` hint on each field. Output is already formatted, so `terraform fmt` has
 nothing left to do.
 
+Want just the HCL? Add `--no-comments`:
+
+```sh
+vcf2tf example deployment --no-comments
+```
+
 ## Worth knowing
 
 - The values are placeholders (`""`, `0`, `false`). Treat the output as a
@@ -106,6 +112,7 @@ nothing left to do.
 
 | Flag | Description |
 | --- | --- |
+| `--no-comments` | Skip the field documentation comments and print just the HCL. |
 | `--kubeconfig` | Path to kubeconfig (defaults to `KUBECONFIG`, then `~/.kube/config`). |
 | `--context` | Context to use (defaults to your current one). |
 | `--version` | Print the version. |

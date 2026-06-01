@@ -37,7 +37,7 @@ func newExampleCommand() *cobra.Command {
 				return err
 			}
 
-			hcl, err := generate(client, res)
+			hcl, err := generate(client, res, !flagNoComments)
 			if err != nil {
 				return err
 			}
