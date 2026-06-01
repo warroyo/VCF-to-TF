@@ -19,10 +19,13 @@ resources, comes out as a `kubernetes_manifest`.
 ## Install
 
 ```sh
-go install github.com/warroyo/VCF-to-TF/cmd/vcf2tf@latest
+curl -fsSL https://raw.githubusercontent.com/warroyo/VCF-to-TF/main/install.sh | sh
 ```
 
-Or grab a prebuilt binary from the [releases page](https://github.com/warroyo/VCF-to-TF/releases).
+That grabs the right binary for your OS and architecture from the latest
+release and drops it on your PATH. Prefer to do it yourself? Download a binary
+from the [releases page](https://github.com/warroyo/VCF-to-TF/releases), or
+build from source with `go install github.com/warroyo/VCF-to-TF/cmd/vcf2tf@latest`.
 
 It uses whatever context `kubectl` is already pointed at. Nothing else to set up.
 
