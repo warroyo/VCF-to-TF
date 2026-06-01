@@ -1,6 +1,10 @@
 # GoReleaser config. Docs: https://goreleaser.com
 version: 2
 
+# Pin the project name so archive names match the binary (vcf2tf_*), not the
+# repo name (VCF-to-TF). The installer relies on this prefix.
+project_name: vcf2tf
+
 before:
   hooks:
     - go mod tidy
