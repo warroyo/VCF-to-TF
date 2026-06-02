@@ -34,10 +34,9 @@ run it, log in and create a VCFA context with the VCF CLI.
 
 You can target either scope:
 
-- **Organization context** — sees every namespace and API available to your org.
-  Use this to browse the full catalog of types.
+- **Organization context** — sees every API available at the org level (ex. project, vpc).
 - **Namespace context** — scoped to a single namespace. Use this when you want
-  the APIs available within one namespace (for example, a specific project).
+  the APIs available within one namespace (for example, cluster).
 
 Create an **organization context** with the VCF CLI:
 
