@@ -115,7 +115,11 @@ func scopeOf(rawSchema json.RawMessage) []string {
 //	cluster      -> spec.topology.variables[]
 //	controlPlane -> spec.topology.controlPlane.variables.overrides[]
 //	workers      -> spec.topology.workers.machineDeployments[].variables.overrides[]
-func BuildClusterExample(group, version, kind, className string, vars []ClusterVariable, opts Options) (string, error) {
+//
+// doc is the Cluster's own OpenAPI v3 document; it is only used to build the
+// optional wait{} block (--wait) from the Cluster's status schema. Pass nil to
+// skip it. The topology body is rendered from the ClusterClass variables.
+func BuildClusterExample(doc []byte, group, version, kind, className string, vars []ClusterVariable, opts Options) (string, error) {
 	apiVersion := version
 	if group != "" {
 		apiVersion = group + "/" + version
@@ -189,6 +193,17 @@ func BuildClusterExample(group, version, kind, className string, vars []ClusterV
 	g.line("}") // topology
 	g.line("}") // spec
 	g.line("}") // manifest
+
+	// Optional wait{} block, built from the Cluster's own status schema.
+	if opts.Wait && len(doc) > 0 {
+		if set, err := parseSchemaSet(doc); err == nil {
+			if root, err := set.findKind(group, version, kind); err == nil {
+				g.set = set
+				g.waitBlock(kind, root)
+			}
+		}
+	}
+
 	g.line("}") // resource
 
 	return string(hclwrite.Format([]byte(g.sb.String()))), nil

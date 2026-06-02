@@ -104,7 +104,7 @@ func TestBuildClusterExample(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	out, err := BuildClusterExample("cluster.x-k8s.io", "v1beta1", "Cluster", "my-cc", vars, Options{Comments: true, RequiredOnly: false})
+	out, err := BuildClusterExample(nil, "cluster.x-k8s.io", "v1beta1", "Cluster", "my-cc", vars, Options{Comments: true, RequiredOnly: false})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -135,5 +135,55 @@ func TestBuildClusterExample(t *testing.T) {
 	// deprecated variable must be omitted entirely.
 	if strings.Contains(out, "kubeAPIServerFQDNs") {
 		t.Errorf("deprecated variable should be skipped\n%s", out)
+	}
+}
+
+// clusterDoc is a minimal Cluster OpenAPI schema with a status carrying
+// conditions[] and a couple scalar fields, used for the --wait block.
+const clusterDoc = `{
+  "components": {
+    "schemas": {
+      "io.x-k8s.cluster.v1beta1.Cluster": {
+        "type": "object",
+        "x-kubernetes-group-version-kind": [{"group": "cluster.x-k8s.io", "version": "v1beta1", "kind": "Cluster"}],
+        "properties": {
+          "status": {
+            "type": "object",
+            "properties": {
+              "phase": {"type": "string"},
+              "controlPlaneReady": {"type": "boolean"},
+              "conditions": {
+                "type": "array",
+                "items": {"type": "object", "properties": {"type": {"type": "string"}, "status": {"type": "string"}}}
+              }
+            }
+          }
+        }
+      }
+    }
+  }
+}`
+
+func TestBuildClusterExampleWait(t *testing.T) {
+	vars, err := ParseClusterVariables([]byte(sampleClusterClassVars))
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	out, err := BuildClusterExample([]byte(clusterDoc), "cluster.x-k8s.io", "v1beta1", "Cluster", "my-cc", vars, Options{Comments: true, Wait: true})
+	if err != nil {
+		t.Fatal(err)
+	}
+	mustParse(t, out)
+
+	for _, want := range []string{
+		"wait {",
+		"condition {",                          // status.conditions[] -> condition block
+		`"status.phase" = "*"`,
+		`"status.controlPlaneReady" = "*"`,
+	} {
+		if !strings.Contains(out, want) {
+			t.Errorf("cluster wait output missing %q\n---\n%s", want, out)
+		}
 	}
 }

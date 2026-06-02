@@ -134,5 +134,14 @@ func generateCluster(ctx context.Context, client *k8s.Client, r k8s.APIResource,
 	if err != nil {
 		return "", err
 	}
-	return tf.BuildClusterExample(r.Group, r.Version, r.Kind, className, vars, opts)
+
+	// The Cluster's own schema is only needed for the --wait status block.
+	var doc []byte
+	if opts.Wait {
+		doc, err = client.FetchOpenAPI(r)
+		if err != nil {
+			return "", fmt.Errorf("fetch schema for %s: %w", r.Kind, err)
+		}
+	}
+	return tf.BuildClusterExample(doc, r.Group, r.Version, r.Kind, className, vars, opts)
 }
