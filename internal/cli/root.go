@@ -22,6 +22,7 @@ var (
 	flagNoComments     bool
 	flagRequiredOnly   bool
 	flagMarkOptional   bool
+	flagWait           bool
 	flagClusterClass   string
 	flagClusterClassNS string
 )
@@ -33,6 +34,7 @@ func buildOpts(comments bool) tf.Options {
 		Comments:     comments,
 		MarkOptional: flagMarkOptional,
 		RequiredOnly: flagRequiredOnly,
+		Wait:         flagWait,
 	}
 }
 
@@ -58,9 +60,8 @@ func NewRootCommand() *cobra.Command {
 type's OpenAPI schema (like "kubectl explain"), with field descriptions as
 comments. It does not read live/deployed objects.
 
-Run with no arguments to interactively browse and pick an API type. Standard
-kinds map to the native "kubernetes" provider; custom resources map to the
-generic kubernetes_manifest resource.`,
+Run with no arguments to interactively browse and pick an API type. Every type
+is rendered as a kubernetes_manifest resource built straight from its API schema.`,
 		SilenceUsage:  true,
 		SilenceErrors: true,
 		Args:          cobra.NoArgs,
@@ -87,6 +88,7 @@ generic kubernetes_manifest resource.`,
 	root.PersistentFlags().BoolVar(&flagNoComments, "no-comments", false, "omit field documentation comments from the output")
 	root.PersistentFlags().BoolVar(&flagRequiredOnly, "required-only", false, "emit only fields the API marks as required")
 	root.PersistentFlags().BoolVar(&flagMarkOptional, "mark-optional", false, "keep all fields but replace descriptions with a terse '# optional' tag")
+	root.PersistentFlags().BoolVar(&flagWait, "wait", false, "emit an example wait{} block from the type's status fields and conditions")
 	root.PersistentFlags().StringVar(&flagClusterClass, "cluster-class", "", "ClusterClass name used to expand a Cluster's topology variables (Cluster kind only)")
 	root.PersistentFlags().StringVar(&flagClusterClassNS, "cluster-class-namespace", "vmware-system-vks-public", "namespace to look up ClusterClasses in")
 

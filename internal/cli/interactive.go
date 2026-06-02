@@ -26,16 +26,12 @@ func runInteractive(ctx context.Context, client *k8s.Client) (string, error) {
 
 	items := make([]list.Item, 0, len(resources))
 	for _, r := range resources {
-		strategy := "manifest"
-		if tf.IsNative(r.Group, r.Version, r.Kind) {
-			strategy = "native"
-		}
 		scope := "cluster"
 		if r.Namespaced {
 			scope = "namespaced"
 		}
 		items = append(items, pickItem{
-			title: fmt.Sprintf("%-30s %s · %s · %s", r.Kind, r.GroupVersion(), scope, strategy),
+			title: fmt.Sprintf("%-30s %s · %s", r.Kind, r.GroupVersion(), scope),
 			desc:  "",
 			value: r,
 		})

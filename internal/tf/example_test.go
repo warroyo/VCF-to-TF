@@ -79,7 +79,9 @@ const sampleDoc = `{
   }
 }`
 
-func TestExampleNative(t *testing.T) {
+// Standard kinds (e.g. apps/v1 Deployment) render as kubernetes_manifest too,
+// keeping the original API field names, descriptions, and enums.
+func TestExampleCoreKindAsManifest(t *testing.T) {
 	out, err := BuildExample([]byte(sampleDoc), "apps", "v1", "Deployment", Options{Comments: true, RequiredOnly: false})
 	if err != nil {
 		t.Fatal(err)
@@ -87,18 +89,19 @@ func TestExampleNative(t *testing.T) {
 	mustParse(t, out)
 
 	for _, want := range []string{
-		`resource "kubernetes_deployment" "example"`,
-		"metadata {",
-		"spec {",
+		`resource "kubernetes_manifest" "example"`,
+		"manifest = {",
+		`kind       = "Deployment"`,
+		"spec = {",
 		"replicas = 0",
-		"container {",                  // array<object> -> repeated singular block
-		"image_pull_policy",            // snake_case conversion
+		"containers = [",               // array<object> -> object list, plural kept
+		"imagePullPolicy",              // original field name, no snake_case
 		"# Number of desired pods.",    // description comment
 		"one of: Always, IfNotPresent", // enum annotation
-		"match_labels = {}",            // map -> attribute
+		"matchLabels = {}",             // map -> attribute, original name kept
 	} {
 		if !strings.Contains(out, want) {
-			t.Errorf("native output missing %q\n---\n%s", want, out)
+			t.Errorf("manifest output missing %q\n---\n%s", want, out)
 		}
 	}
 }
@@ -138,7 +141,7 @@ func TestExampleRequiredOnly(t *testing.T) {
 	if !strings.Contains(out, "selector") {
 		t.Errorf("required field selector missing\n%s", out)
 	}
-	for _, omit := range []string{"replicas", "paused", "container", "image_pull_policy"} {
+	for _, omit := range []string{"replicas", "paused", "containers", "imagePullPolicy"} {
 		if strings.Contains(out, omit) {
 			t.Errorf("optional field %q should be omitted in required-only mode\n%s", omit, out)
 		}
@@ -157,7 +160,7 @@ func TestExampleMarkOptional(t *testing.T) {
 	mustParse(t, out)
 
 	// all fields still present
-	for _, want := range []string{"replicas = 0", "container {", "selector {"} {
+	for _, want := range []string{"replicas = 0", "containers = [", "selector = {"} {
 		if !strings.Contains(out, want) {
 			t.Errorf("mark-optional should keep all fields, missing %q\n%s", want, out)
 		}
@@ -183,9 +186,9 @@ func TestExampleNoComments(t *testing.T) {
 	}
 	// structure must still be present
 	for _, want := range []string{
-		`resource "kubernetes_deployment" "example"`,
+		`resource "kubernetes_manifest" "example"`,
 		"replicas = 0",
-		"container {",
+		"containers = [",
 	} {
 		if !strings.Contains(out, want) {
 			t.Errorf("no-comments output missing %q\n---\n%s", want, out)

@@ -149,7 +149,7 @@ func BuildClusterExample(group, version, kind, className string, vars []ClusterV
 	g.line("manifest = {")
 	g.line(fmt.Sprintf("apiVersion = %q", apiVersion))
 	g.line(fmt.Sprintf("kind = %q", kind))
-	g.metadataBlock(true)
+	g.metadataBlock()
 
 	g.line("spec = {")
 	g.line("topology = {")
@@ -211,6 +211,6 @@ func (g *generator) varEntry(v ClusterVariable) {
 	g.line("{")
 	g.line(fmt.Sprintf("name = %q", v.Name))
 	// reuse the schema walker to build the value skeleton (object style).
-	g.field("value", v.Schema, true, v.Required, 2)
+	g.field("value", v.Schema, v.Required, 2)
 	g.line("},")
 }

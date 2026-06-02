@@ -12,9 +12,10 @@ so you keep what you need and delete the rest.
 It builds from the API schema, not your running objects. You get a blank
 template to fill in, not a copy of something already deployed.
 
-Standard Kubernetes types (Deployment, Secret, Service, and so on) come out as
-native `kubernetes_*` resources. Everything else, including VCF custom
-resources, comes out as a `kubernetes_manifest`.
+Everything comes out as a `kubernetes_manifest`, built straight from the API
+schema. Standard Kubernetes kinds (Deployment, Secret, Service) and VCF custom
+resources are treated the same way, so the field names and structure always
+match what your cluster actually serves.
 
 ![vcf2tf demo](images/vcf2tf.gif)
 
@@ -80,6 +81,7 @@ options live while you browse:
 - `c` — comments on/off
 - `o` — optional-field tags (`# optional`) on/off
 - `r` — required-only on/off
+- `w` — example `wait {}` block on/off
 
 The current state shows in the title bar. The block prints to stdout.
 
@@ -132,38 +134,78 @@ $ vcf2tf example deployment
 ```
 
 ```hcl
-resource "kubernetes_deployment" "example" {
-  # Standard object metadata.
-  metadata {
-    # Name of the object (required).
-    name = ""
-    # Namespace to create the object in.
-    namespace = ""
-  }
-  spec {
-    # Number of desired pods.
-    # [integer (int32)]
-    replicas = 0
-    container {
-      # [string]
-      image = ""
-      # [string, one of: Always, IfNotPresent, Never]
-      image_pull_policy = "Always"
+resource "kubernetes_manifest" "example" {
+  manifest = {
+    apiVersion = "apps/v1"
+    kind       = "Deployment"
+    # Standard object metadata.
+    metadata = {
+      # Name of the object (required).
+      name = ""
+      # Namespace to create the object in.
+      namespace = ""
+    }
+    # [required, object]
+    spec = {
+      # Number of desired pods.
+      # [integer (int32)]
+      replicas = 0
+      containers = [
+        {
+          # [string]
+          image = ""
+          # [string, one of: Always, IfNotPresent, Never]
+          imagePullPolicy = "Always"
+        }
+      ]
     }
   }
 }
 ```
 
-The comments come straight from the API docs, with a `# [type, required, allowed
-values]` hint on each field. Output is already formatted, so `terraform fmt` has
-nothing left to do.
+Field names stay exactly as the API spells them (`imagePullPolicy`, not
+`image_pull_policy`). The comments come straight from the API docs, with a
+`# [type, required, allowed values]` hint on each field. Output is already
+formatted, so `terraform fmt` has nothing left to do.
 
 Want just the HCL? Add `--no-comments`. Want only the fields the API requires?
-Add `--required-only` (combine them for the leanest possible scaffold):
+Add `--required-only` (combine them for the leanest scaffold):
 
 ```sh
 vcf2tf example deployment --no-comments --required-only
 ```
+
+### Wait for status
+
+`kubernetes_manifest` can block create/update until the object's status is ready.
+Add `--wait` to scaffold a `wait {}` block from the type's status schema — a
+`rollout = true` for workloads (Deployment, StatefulSet, DaemonSet), a `condition`
+block when the type reports `status.conditions`, and a `fields` map of the status
+field paths you can match on:
+
+```sh
+vcf2tf example deployment --wait
+```
+
+```hcl
+  wait {
+    rollout = true
+
+    condition {
+      type   = ""
+      status = "True"
+    }
+
+    fields = {
+      # [string, one of: Pending, Running]
+      "status.phase" = "Pending"
+      "status.readyReplicas" = "*"
+    }
+  }
+```
+
+Same idea as everywhere else: keep the checks you want, delete the rest. Values
+are regexes; `*` matches any value.
 
 ## Worth knowing
 
@@ -181,6 +223,7 @@ vcf2tf example deployment --no-comments --required-only
 | `--no-comments` | Skip the field documentation comments and print just the HCL. |
 | `--required-only` | Emit only the fields the API marks as required. |
 | `--mark-optional` | Keep every field, but tag optional ones with a terse `# optional` instead of full descriptions. |
+| `--wait` | Emit an example `wait {}` block from the type's status fields and conditions (rollout for workloads, a `condition` block, and `fields` paths). |
 | `--cluster-class` | ClusterClass name used to expand a `Cluster`'s topology variables. |
 | `--cluster-class-namespace` | Where to find ClusterClasses (default `vmware-system-vks-public`). |
 | `--kubeconfig` | Path to kubeconfig (defaults to `KUBECONFIG`, then `~/.kube/config`). |

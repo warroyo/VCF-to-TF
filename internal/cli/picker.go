@@ -44,8 +44,8 @@ func onOff(b bool) string {
 
 // titleWithState renders the list title plus the live toggle hints.
 func (m pickerModel) titleWithState() string {
-	return fmt.Sprintf("%s  ·  [c]omments:%s  [o]ptional-tags:%s  [r]equired-only:%s",
-		m.baseTitle, onOff(m.opts.Comments), onOff(m.opts.MarkOptional), onOff(m.opts.RequiredOnly))
+	return fmt.Sprintf("%s  ·  [c]omments:%s  [o]ptional-tags:%s  [r]equired-only:%s  [w]ait:%s",
+		m.baseTitle, onOff(m.opts.Comments), onOff(m.opts.MarkOptional), onOff(m.opts.RequiredOnly), onOff(m.opts.Wait))
 }
 
 func (m pickerModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
@@ -77,6 +77,10 @@ func (m pickerModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			return m, nil
 		case "r":
 			m.opts.RequiredOnly = !m.opts.RequiredOnly
+			m.list.Title = m.titleWithState()
+			return m, nil
+		case "w":
+			m.opts.Wait = !m.opts.Wait
 			m.list.Title = m.titleWithState()
 			return m, nil
 		case "enter":
