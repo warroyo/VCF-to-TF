@@ -16,6 +16,8 @@ Standard Kubernetes types (Deployment, Secret, Service, and so on) come out as
 native `kubernetes_*` resources. Everything else, including VCF custom
 resources, comes out as a `kubernetes_manifest`.
 
+![vcf2tf demo](images/vcf2tf.gif)
+
 ## Install
 
 ```sh
