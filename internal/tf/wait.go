@@ -31,14 +31,14 @@ func (g *generator) waitBlock(kind string, root *schemaNode) {
 	status, _ := g.set.resolve(root.Properties["status"])
 
 	rollout := rolloutKinds[kind]
-	conditions := hasConditions(g.set, status)
+	condItem := conditionsItem(g.set, status)
 
 	var fields []statusField
 	if status != nil {
 		g.collectStatusFields(status, "status", 1, &fields)
 	}
 
-	if !rollout && !conditions && len(fields) == 0 {
+	if !rollout && condItem == nil && len(fields) == 0 {
 		return
 	}
 
@@ -51,11 +51,14 @@ func (g *generator) waitBlock(kind string, root *schemaNode) {
 		g.line("rollout = true")
 	}
 
-	if conditions {
+	if condItem != nil {
 		g.comment("Wait for a status condition. Repeat the block for multiple conditions.")
 		g.line("condition {")
-		g.line(`type   = ""`)
-		g.line(`status = "True"`)
+		// Condition types are usually free-form strings defined in controller
+		// code, so the schema rarely enumerates them; surface an enum/description
+		// when the CRD does provide one.
+		g.conditionField(condItem, "type", `""`)
+		g.conditionField(condItem, "status", `"True"`)
 		g.line("}")
 	}
 
@@ -133,21 +136,50 @@ func waitValue(node *schemaNode) string {
 	return "*"
 }
 
-// hasConditions reports whether status has a conditions[] array of objects with
-// the standard type/status fields, i.e. it's waitable via a condition{} block.
-func hasConditions(set *schemaSet, status *schemaNode) bool {
+// conditionsItem returns the schema of a status.conditions[] entry when status
+// has a conditions[] array of objects carrying the standard type/status fields,
+// i.e. it's waitable via a condition{} block. Returns nil otherwise. The
+// returned node lets the caller read any enum/description on type/status.
+func conditionsItem(set *schemaSet, status *schemaNode) *schemaNode {
 	if status == nil {
-		return false
+		return nil
 	}
 	conds, _ := set.resolve(status.Properties["conditions"])
 	if conds == nil || conds.Type != "array" {
-		return false
+		return nil
 	}
 	items, _ := set.resolve(conds.Items)
 	if items == nil || items.Type != "object" {
-		return false
+		return nil
 	}
 	_, hasType := items.Properties["type"]
 	_, hasStatus := items.Properties["status"]
-	return hasType && hasStatus
+	if hasType && hasStatus {
+		return items
+	}
+	return nil
+}
+
+// conditionField emits one `type`/`status` line of a condition{} block. It reads
+// the field's enum and description from the conditions item schema: when the CRD
+// enumerates allowed values it seeds the first one and lists the rest as a
+// comment; otherwise it falls back to the given literal (the schema doesn't carry
+// the value, as condition types are typically code-defined constants).
+func (g *generator) conditionField(item *schemaNode, key, fallback string) {
+	node, desc := g.set.resolve(item.Properties[key])
+	value := fallback
+	if node != nil && len(node.Enum) > 0 {
+		if s, ok := node.Enum[0].(string); ok {
+			value = fmt.Sprintf("%q", s)
+		}
+	}
+	if g.opts.Comments && node != nil {
+		if desc != "" {
+			g.comment(desc)
+		}
+		if len(node.Enum) > 0 {
+			g.line("# one of: " + enumList(node.Enum))
+		}
+	}
+	g.line(fmt.Sprintf("%s = %s", key, value))
 }

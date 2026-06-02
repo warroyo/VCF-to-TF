@@ -73,6 +73,53 @@ func TestWaitFromStatus(t *testing.T) {
 	}
 }
 
+// When the CRD enumerates condition type/status values, the condition block
+// seeds the first one and lists the rest as a comment instead of leaving blanks.
+func TestWaitConditionEnum(t *testing.T) {
+	const doc = `{
+  "components": {
+    "schemas": {
+      "com.example.v1.App": {
+        "type": "object",
+        "x-kubernetes-group-version-kind": [{"group": "example.com", "version": "v1", "kind": "App"}],
+        "properties": {
+          "status": {
+            "type": "object",
+            "properties": {
+              "conditions": {
+                "type": "array",
+                "items": {
+                  "type": "object",
+                  "properties": {
+                    "type": {"type": "string", "enum": ["Ready", "Available", "Progressing"]},
+                    "status": {"type": "string", "enum": ["True", "False", "Unknown"]}
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+  }
+}`
+	out, err := BuildExample([]byte(doc), "example.com", "v1", "App", Options{Comments: true, Wait: true})
+	if err != nil {
+		t.Fatal(err)
+	}
+	mustParse(t, out)
+
+	for _, want := range []string{
+		`type = "Ready"`,                          // first enum value seeded
+		"# one of: Ready, Available, Progressing", // remaining listed
+		`status = "True"`,
+	} {
+		if !strings.Contains(out, want) {
+			t.Errorf("condition enum output missing %q\n---\n%s", want, out)
+		}
+	}
+}
+
 func TestWaitRolloutKind(t *testing.T) {
 	// Deployment is rollout-capable; wait should offer rollout even with the
 	// status-less sample doc.
