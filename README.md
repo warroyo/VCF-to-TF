@@ -27,7 +27,41 @@ release and drops it on your PATH. Prefer to do it yourself? Download a binary
 from the [releases page](https://github.com/warroyo/VCF-to-TF/releases), or
 build from source with `go install github.com/warroyo/VCF-to-TF/cmd/vcf2tf@latest`.
 
-It uses whatever context `kubectl` is already pointed at. Nothing else to set up.
+## Connect to VCFA
+
+vcf2tf reads whatever context `kubectl` is currently pointed at, so before you
+run it, log in and create a VCFA context with the VCF CLI.
+
+You can target either scope:
+
+- **Organization context** — sees every namespace and API available to your org.
+  Use this to browse the full catalog of types.
+- **Namespace context** — scoped to a single namespace. Use this when you want
+  the APIs available within one namespace (for example, a specific project).
+
+Create an **organization context** with the VCF CLI:
+
+```sh
+vcf context create vcfa \
+  --endpoint "$VCFA_ENDPOINT" \
+  --api-token "$VCF_CLI_VCFA_API_TOKEN" \
+  --tenant-name "$VCFA_ORG" \
+  --ca-certificate "$VCFA_CERT_PATH"
+```
+
+For a **namespace context**, add the namespace to the same command:
+
+```sh
+vcf context create vcfa \
+  --endpoint "$VCFA_ENDPOINT" \
+  --api-token "$VCF_CLI_VCFA_API_TOKEN" \
+  --tenant-name "$VCFA_ORG" \
+  --ca-certificate "$VCFA_CERT_PATH" \
+  --namespace "$VCFA_NAMESPACE"
+```
+
+That sets your active `kubectl` context. Confirm with `kubectl config
+current-context`, then run vcf2tf.
 
 ## Usage
 
