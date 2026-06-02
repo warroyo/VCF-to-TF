@@ -4,21 +4,27 @@
 package k8s
 
 import (
+	"context"
+	"encoding/json"
 	"fmt"
 	"sort"
 	"strings"
 
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/runtime/schema"
 	"k8s.io/client-go/discovery"
+	"k8s.io/client-go/dynamic"
 	"k8s.io/client-go/tools/clientcmd"
 )
 
 // Client talks to the active cluster for discovery and schema introspection.
-// It deliberately does not read live/deployed objects: this tool generates
-// Terraform from the available API definitions, not from running instances.
+// It generates Terraform from the available API definitions, not from running
+// instances. The one exception is ClusterClass, whose live status.variables
+// hold the schema needed to expand a Cluster's topology variables.
 type Client struct {
 	discovery discovery.DiscoveryInterface
+	dynamic   dynamic.Interface
 }
 
 // APIResource describes one selectable API type (one row of `api-resources`).
@@ -77,7 +83,12 @@ func NewClient(kubeconfig, contextName string) (*Client, error) {
 		return nil, fmt.Errorf("discovery client: %w", err)
 	}
 
-	return &Client{discovery: dc}, nil
+	dyn, err := dynamic.NewForConfig(restCfg)
+	if err != nil {
+		return nil, fmt.Errorf("dynamic client: %w", err)
+	}
+
+	return &Client{discovery: dc, dynamic: dyn}, nil
 }
 
 // ListAPIResources returns every gettable API type the cluster advertises
@@ -145,6 +156,53 @@ func (c *Client) FetchOpenAPI(r APIResource) ([]byte, error) {
 		return nil, fmt.Errorf("fetch schema for %q: %w", key, err)
 	}
 	return doc, nil
+}
+
+// FindResource returns the discovered API type whose plural resource name
+// matches (case-insensitively), e.g. "clusterclasses". Used to resolve a GVR
+// for a live object read without hardcoding the API version.
+func (c *Client) FindResource(plural string) (APIResource, error) {
+	resources, err := c.ListAPIResources()
+	if err != nil {
+		return APIResource{}, err
+	}
+	for _, r := range resources {
+		if strings.EqualFold(r.Resource, plural) {
+			return r, nil
+		}
+	}
+	return APIResource{}, fmt.Errorf("resource %q not found on this cluster", plural)
+}
+
+// ListNames lists the names of all objects of the given type in a namespace.
+func (c *Client) ListNames(ctx context.Context, r APIResource, namespace string) ([]string, error) {
+	list, err := c.dynamic.Resource(r.GVR()).Namespace(namespace).List(ctx, metav1.ListOptions{})
+	if err != nil {
+		return nil, err
+	}
+	names := make([]string, 0, len(list.Items))
+	for i := range list.Items {
+		names = append(names, list.Items[i].GetName())
+	}
+	sort.Strings(names)
+	return names, nil
+}
+
+// GetClusterClassVariables fetches a ClusterClass and returns its
+// status.variables as raw JSON for the translation layer to parse.
+func (c *Client) GetClusterClassVariables(ctx context.Context, r APIResource, namespace, name string) ([]byte, error) {
+	obj, err := c.dynamic.Resource(r.GVR()).Namespace(namespace).Get(ctx, name, metav1.GetOptions{})
+	if err != nil {
+		return nil, err
+	}
+	vars, found, err := unstructured.NestedSlice(obj.Object, "status", "variables")
+	if err != nil {
+		return nil, fmt.Errorf("read status.variables: %w", err)
+	}
+	if !found {
+		return nil, fmt.Errorf("ClusterClass %q has no status.variables (not reconciled yet?)", name)
+	}
+	return json.Marshal(vars)
 }
 
 func hasVerb(verbs metav1.Verbs, want string) bool {

@@ -41,12 +41,55 @@ func runInteractive(ctx context.Context, client *k8s.Client) (string, error) {
 		})
 	}
 
-	chosen, comments, err := runPicker("Select an API resource type", "type", items, !flagNoComments)
+	startOpts := buildOpts(!flagNoComments)
+	chosen, opts, err := runPicker("Select an API resource type", "type", items, startOpts)
 	if err != nil {
 		return "", err
 	}
 	res := chosen.(k8s.APIResource)
 
+	// A Cluster's topology variables come from a ClusterClass; pick one.
+	if isClusterKind(res) {
+		className, o, err := pickClusterClass(ctx, client, opts)
+		if err != nil {
+			return "", err
+		}
+		fmt.Fprintf(os.Stderr, "Generating Cluster from ClusterClass %s…\n", className)
+		return generateCluster(ctx, client, res, className, o)
+	}
+
 	fmt.Fprintf(os.Stderr, "Generating Terraform example for %s…\n", res.Kind)
-	return generate(client, res, comments)
+	return generate(client, res, opts)
+}
+
+// pickClusterClass lists the ClusterClasses in the configured namespace and
+// prompts for one. Honors --cluster-class if already set. Returns the chosen
+// name and the (possibly re-toggled) render options.
+func pickClusterClass(ctx context.Context, client *k8s.Client, opts tf.Options) (string, tf.Options, error) {
+	if flagClusterClass != "" {
+		return flagClusterClass, opts, nil
+	}
+
+	cc, err := client.FindResource("clusterclasses")
+	if err != nil {
+		return "", opts, fmt.Errorf("find ClusterClass API: %w", err)
+	}
+	fmt.Fprintf(os.Stderr, "Listing ClusterClasses in %s…\n", flagClusterClassNS)
+	names, err := client.ListNames(ctx, cc, flagClusterClassNS)
+	if err != nil {
+		return "", opts, fmt.Errorf("list ClusterClasses in %s: %w", flagClusterClassNS, err)
+	}
+	if len(names) == 0 {
+		return "", opts, fmt.Errorf("no ClusterClasses found in %s (set --cluster-class-namespace?)", flagClusterClassNS)
+	}
+
+	items := make([]list.Item, 0, len(names))
+	for _, n := range names {
+		items = append(items, pickItem{title: n, value: n})
+	}
+	picked, o, err := runPicker("Select a ClusterClass", "clusterclass", items, opts)
+	if err != nil {
+		return "", opts, err
+	}
+	return picked.(string), o, nil
 }

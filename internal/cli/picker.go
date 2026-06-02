@@ -7,6 +7,8 @@ import (
 	"github.com/charmbracelet/bubbles/list"
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
+
+	"github.com/warroyo/VCF-to-TF/internal/tf"
 )
 
 // errAborted is returned when the user quits the picker without choosing.
@@ -26,20 +28,24 @@ func (i pickItem) FilterValue() string { return i.title + " " + i.desc }
 type pickerModel struct {
 	list      list.Model
 	baseTitle string
-	comments  bool // current "emit comments" state, toggled with "c"
+	opts      tf.Options // render options, toggled live with c / o / r
 	chosen    *pickItem
 	aborted   bool
 }
 
 func (m pickerModel) Init() tea.Cmd { return nil }
 
-// titleWithState renders the list title plus the live comments toggle hint.
-func (m pickerModel) titleWithState() string {
-	state := "on"
-	if !m.comments {
-		state = "off"
+func onOff(b bool) string {
+	if b {
+		return "on"
 	}
-	return fmt.Sprintf("%s  ·  comments: %s (press c)", m.baseTitle, state)
+	return "off"
+}
+
+// titleWithState renders the list title plus the live toggle hints.
+func (m pickerModel) titleWithState() string {
+	return fmt.Sprintf("%s  ·  [c]omments:%s  [o]ptional-tags:%s  [r]equired-only:%s",
+		m.baseTitle, onOff(m.opts.Comments), onOff(m.opts.MarkOptional), onOff(m.opts.RequiredOnly))
 }
 
 func (m pickerModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
@@ -62,7 +68,15 @@ func (m pickerModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.aborted = true
 			return m, tea.Quit
 		case "c":
-			m.comments = !m.comments
+			m.opts.Comments = !m.opts.Comments
+			m.list.Title = m.titleWithState()
+			return m, nil
+		case "o":
+			m.opts.MarkOptional = !m.opts.MarkOptional
+			m.list.Title = m.titleWithState()
+			return m, nil
+		case "r":
+			m.opts.RequiredOnly = !m.opts.RequiredOnly
 			m.list.Title = m.titleWithState()
 			return m, nil
 		case "enter":
@@ -83,7 +97,7 @@ func (m pickerModel) View() string { return m.list.View() }
 // runPicker shows a filterable, keyboard-driven list titled `title` and returns
 // the chosen item's value. The UI renders to stderr so stdout stays reserved
 // for the generated HCL. Returns errAborted if the user quits.
-func runPicker(title, statusNoun string, items []list.Item, comments bool) (interface{}, bool, error) {
+func runPicker(title, statusNoun string, items []list.Item, opts tf.Options) (interface{}, tf.Options, error) {
 	// Compact, one-line-per-item delegate: no description line, no inter-item
 	// spacing. Keeps long lists scannable.
 	delegate := list.NewDefaultDelegate()
@@ -97,7 +111,7 @@ func runPicker(title, statusNoun string, items []list.Item, comments bool) (inte
 	l.SetStatusBarItemName(statusNoun, statusNoun+"s")
 	l.SetShowHelp(true)
 
-	model := pickerModel{list: l, baseTitle: title, comments: comments}
+	model := pickerModel{list: l, baseTitle: title, opts: opts}
 	model.list.Title = model.titleWithState()
 
 	p := tea.NewProgram(
@@ -108,12 +122,12 @@ func runPicker(title, statusNoun string, items []list.Item, comments bool) (inte
 
 	res, err := p.Run()
 	if err != nil {
-		return nil, false, err
+		return nil, opts, err
 	}
 
 	m := res.(pickerModel)
 	if m.aborted || m.chosen == nil {
-		return nil, false, errAborted
+		return nil, opts, errAborted
 	}
-	return m.chosen.value, m.comments, nil
+	return m.chosen.value, m.opts, nil
 }

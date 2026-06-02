@@ -18,7 +18,14 @@ const maxDepth = 6
 // Native core/apps/batch/... kinds render as their native kubernetes_* provider
 // resource (block style, snake_case). Everything else renders as a
 // kubernetes_manifest with the exact API schema (object style, original names).
-func BuildExample(doc []byte, group, version, kind string, comments bool) (string, error) {
+// Options controls how the HCL skeleton is rendered.
+type Options struct {
+	Comments     bool // emit comments at all
+	MarkOptional bool // terse "# optional" markers instead of full descriptions
+	RequiredOnly bool // emit only fields the API marks required
+}
+
+func BuildExample(doc []byte, group, version, kind string, opts Options) (string, error) {
 	set, err := parseSchemaSet(doc)
 	if err != nil {
 		return "", err
@@ -33,7 +40,7 @@ func BuildExample(doc []byte, group, version, kind string, comments bool) (strin
 		apiVersion = group + "/" + version
 	}
 
-	g := &generator{set: set, sb: &strings.Builder{}, comments: comments}
+	g := &generator{set: set, sb: &strings.Builder{}, opts: opts}
 
 	if tfType, ok := nativeType(gvk(group, version, kind)); ok {
 		g.native(tfType, kind, apiVersion, root)
@@ -47,18 +54,38 @@ func BuildExample(doc []byte, group, version, kind string, comments bool) (strin
 }
 
 type generator struct {
-	set      *schemaSet
-	sb       *strings.Builder
-	comments bool // when false, no comment lines are emitted
+	set  *schemaSet
+	sb   *strings.Builder
+	opts Options
 }
 
 func (g *generator) line(s string) { g.sb.WriteString(s + "\n") }
+
+// comment emits a structural/header comment (not a per-field doc). Shown
+// whenever comments are enabled, regardless of MarkOptional.
 func (g *generator) comment(text string) {
-	if !g.comments {
+	if !g.opts.Comments {
 		return
 	}
 	for _, l := range wrapComment(text) {
 		g.line("# " + l)
+	}
+}
+
+// note emits a per-field annotation. In MarkOptional mode optional fields get a
+// terse "# optional" and required fields get nothing; otherwise the full text.
+func (g *generator) note(required bool, full string) {
+	if !g.opts.Comments {
+		return
+	}
+	if g.opts.MarkOptional {
+		if !required {
+			g.line("# optional")
+		}
+		return
+	}
+	if full != "" {
+		g.comment(full)
 	}
 }
 
@@ -75,7 +102,7 @@ func (g *generator) native(tfType, kind, apiVersion string, root *schemaNode) {
 		case "apiVersion", "kind", "status", "metadata":
 			continue
 		}
-		g.field(key, root.Properties[key], false, isRequired(root, key), 1)
+		g.field(key, root.Properties[key], false, topRequired(root, key), 1)
 	}
 	g.line("}")
 }
@@ -96,14 +123,21 @@ func (g *generator) manifest(kind, apiVersion string, root *schemaNode) {
 		case "apiVersion", "kind", "status", "metadata":
 			continue
 		}
-		g.field(key, root.Properties[key], true, isRequired(root, key), 2)
+		g.field(key, root.Properties[key], true, topRequired(root, key), 2)
 	}
 	g.line("}") // manifest
 	g.line("}") // resource
 }
 
+// topRequired keeps the structural `spec` root even when the object's schema
+// does not list it as required, so required-only output isn't empty. Filtering
+// still applies to spec's descendants.
+func topRequired(root *schemaNode, key string) bool {
+	return key == "spec" || isRequired(root, key)
+}
+
 // metadataBlock emits a slim, commented metadata section rather than expanding
-// the full (huge) ObjectMeta schema.
+// the full (huge) ObjectMeta schema. In required-only mode just `name` is kept.
 func (g *generator) metadataBlock(object bool) {
 	open := "metadata {"
 	if object {
@@ -111,19 +145,24 @@ func (g *generator) metadataBlock(object bool) {
 	}
 	g.comment("Standard object metadata.")
 	g.line(open)
-	g.comment("Name of the object (required).")
+	g.note(true, "Name of the object (required).")
 	g.line(`name = ""`)
-	g.comment("Namespace to create the object in.")
-	g.line(`namespace = ""`)
-	g.comment("Key/value labels.")
-	g.line("labels = {}")
-	g.comment("Key/value annotations.")
-	g.line("annotations = {}")
+	if !g.opts.RequiredOnly {
+		g.note(false, "Namespace to create the object in.")
+		g.line(`namespace = ""`)
+		g.note(false, "Key/value labels.")
+		g.line("labels = {}")
+		g.note(false, "Key/value annotations.")
+		g.line("annotations = {}")
+	}
 	g.line("}")
 }
 
 // field renders one property. object selects object-literal vs block style.
 func (g *generator) field(rawName string, node *schemaNode, object, required bool, depth int) {
+	if g.opts.RequiredOnly && !required {
+		return
+	}
 	resolved, desc := g.set.resolve(node)
 	if resolved == nil {
 		return
@@ -195,8 +234,15 @@ func (g *generator) openContainer(name string, object bool, brace string) {
 }
 
 // emitDoc writes the description plus a required/type/enum annotation line.
+// In MarkOptional mode it collapses to a terse "# optional" on optional fields.
 func (g *generator) emitDoc(desc string, node *schemaNode, required bool) {
-	if !g.comments {
+	if !g.opts.Comments {
+		return
+	}
+	if g.opts.MarkOptional {
+		if !required {
+			g.line("# optional")
+		}
 		return
 	}
 	if desc != "" {

@@ -1,8 +1,10 @@
 package cli
 
 import (
+	"context"
 	"fmt"
 	"strings"
+	"time"
 
 	"github.com/spf13/cobra"
 
@@ -37,7 +39,18 @@ func newExampleCommand() *cobra.Command {
 				return err
 			}
 
-			hcl, err := generate(client, res, !flagNoComments)
+			var hcl string
+			if isClusterKind(res) {
+				if flagClusterClass == "" {
+					return fmt.Errorf("Cluster needs a ClusterClass: pass --cluster-class NAME "+
+						"(list with: kubectl get clusterclass -n %s), or run vcf2tf with no args to pick interactively", flagClusterClassNS)
+				}
+				ctx, cancel := context.WithTimeout(cmd.Context(), 30*time.Second)
+				defer cancel()
+				hcl, err = generateCluster(ctx, client, res, flagClusterClass, buildOpts(!flagNoComments))
+			} else {
+				hcl, err = generate(client, res, buildOpts(!flagNoComments))
+			}
 			if err != nil {
 				return err
 			}

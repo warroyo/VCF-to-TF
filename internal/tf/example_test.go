@@ -80,7 +80,7 @@ const sampleDoc = `{
 }`
 
 func TestExampleNative(t *testing.T) {
-	out, err := BuildExample([]byte(sampleDoc), "apps", "v1", "Deployment", true)
+	out, err := BuildExample([]byte(sampleDoc), "apps", "v1", "Deployment", Options{Comments: true, RequiredOnly: false})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -104,7 +104,7 @@ func TestExampleNative(t *testing.T) {
 }
 
 func TestExampleManifest(t *testing.T) {
-	out, err := BuildExample([]byte(sampleDoc), "example.com", "v1", "Widget", true)
+	out, err := BuildExample([]byte(sampleDoc), "example.com", "v1", "Widget", Options{Comments: true, RequiredOnly: false})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -127,8 +127,52 @@ func TestExampleManifest(t *testing.T) {
 	}
 }
 
+func TestExampleRequiredOnly(t *testing.T) {
+	out, err := BuildExample([]byte(sampleDoc), "apps", "v1", "Deployment", Options{Comments: true, RequiredOnly: true})
+	if err != nil {
+		t.Fatal(err)
+	}
+	mustParse(t, out)
+
+	// spec.required = [selector, template]; everything else is optional.
+	if !strings.Contains(out, "selector") {
+		t.Errorf("required field selector missing\n%s", out)
+	}
+	for _, omit := range []string{"replicas", "paused", "container", "image_pull_policy"} {
+		if strings.Contains(out, omit) {
+			t.Errorf("optional field %q should be omitted in required-only mode\n%s", omit, out)
+		}
+	}
+	// metadata keeps only name.
+	if strings.Contains(out, "annotations") || strings.Contains(out, "labels") {
+		t.Errorf("required-only metadata should be name-only\n%s", out)
+	}
+}
+
+func TestExampleMarkOptional(t *testing.T) {
+	out, err := BuildExample([]byte(sampleDoc), "apps", "v1", "Deployment", Options{Comments: true, MarkOptional: true})
+	if err != nil {
+		t.Fatal(err)
+	}
+	mustParse(t, out)
+
+	// all fields still present
+	for _, want := range []string{"replicas = 0", "container {", "selector {"} {
+		if !strings.Contains(out, want) {
+			t.Errorf("mark-optional should keep all fields, missing %q\n%s", want, out)
+		}
+	}
+	// terse marker present, full descriptions gone
+	if !strings.Contains(out, "# optional") {
+		t.Errorf("expected '# optional' markers\n%s", out)
+	}
+	if strings.Contains(out, "# Number of desired pods.") {
+		t.Errorf("full descriptions should be replaced by markers\n%s", out)
+	}
+}
+
 func TestExampleNoComments(t *testing.T) {
-	out, err := BuildExample([]byte(sampleDoc), "apps", "v1", "Deployment", false)
+	out, err := BuildExample([]byte(sampleDoc), "apps", "v1", "Deployment", Options{Comments: false, RequiredOnly: false})
 	if err != nil {
 		t.Fatal(err)
 	}

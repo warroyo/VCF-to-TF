@@ -39,8 +39,14 @@ Run it with no arguments to search the full list of API types:
 vcf2tf
 ```
 
-Type to filter, arrow keys to move, `c` to toggle comments on/off, `Enter` to
-pick, `q` to quit. The block prints to stdout.
+Type to filter, arrow keys to move, `Enter` to pick, `q` to quit. Toggle output
+options live while you browse:
+
+- `c` — comments on/off
+- `o` — optional-field tags (`# optional`) on/off
+- `r` — required-only on/off
+
+The current state shows in the title bar. The block prints to stdout.
 
 ### Generate one directly
 
@@ -59,6 +65,30 @@ qualified form (`resource.group`). Send it straight to a file:
 ```sh
 vcf2tf example deployment > deployment.tf
 ```
+
+### VKS Clusters
+
+A `Cluster` (`cluster.x-k8s.io`) is special: its `spec.topology` variables are
+opaque in the Cluster's own schema. The real schemas live in the **ClusterClass**
+it references, so vcf2tf reads that and expands the variables for you.
+
+Each variable lands in every topology section its scope allows:
+
+- `cluster` → `spec.topology.variables`
+- `controlPlane` → `spec.topology.controlPlane.variables.overrides`
+- `workers` → `spec.topology.workers.machineDeployments[].variables.overrides`
+
+Interactively, picking `Cluster` prompts you for a ClusterClass. Scripted, pass
+the name:
+
+```sh
+vcf2tf example cluster --cluster-class tkg-vsphere-default-v3.2.0
+```
+
+ClusterClasses are looked up in `vmware-system-vks-public` by default; override
+with `--cluster-class-namespace`. The expansion is verbose (every variable, in
+every section it supports) — `--no-comments` trims it sharply, and you delete
+what you don't set.
 
 ## What you get
 
@@ -93,10 +123,11 @@ The comments come straight from the API docs, with a `# [type, required, allowed
 values]` hint on each field. Output is already formatted, so `terraform fmt` has
 nothing left to do.
 
-Want just the HCL? Add `--no-comments`:
+Want just the HCL? Add `--no-comments`. Want only the fields the API requires?
+Add `--required-only` (combine them for the leanest possible scaffold):
 
 ```sh
-vcf2tf example deployment --no-comments
+vcf2tf example deployment --no-comments --required-only
 ```
 
 ## Worth knowing
@@ -113,6 +144,10 @@ vcf2tf example deployment --no-comments
 | Flag | Description |
 | --- | --- |
 | `--no-comments` | Skip the field documentation comments and print just the HCL. |
+| `--required-only` | Emit only the fields the API marks as required. |
+| `--mark-optional` | Keep every field, but tag optional ones with a terse `# optional` instead of full descriptions. |
+| `--cluster-class` | ClusterClass name used to expand a `Cluster`'s topology variables. |
+| `--cluster-class-namespace` | Where to find ClusterClasses (default `vmware-system-vks-public`). |
 | `--kubeconfig` | Path to kubeconfig (defaults to `KUBECONFIG`, then `~/.kube/config`). |
 | `--context` | Context to use (defaults to your current one). |
 | `--version` | Print the version. |
